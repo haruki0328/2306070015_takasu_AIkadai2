@@ -121,13 +121,21 @@ else:
                     st.session_state.search_results = search_books(search_query)
                 st.rerun()
         
-        with tab2:
-            categories = ["love", "adventure", "fantasy", "mystery", "science_fiction", "history"]
-            selected_category = st.selectbox("興味のあるカテゴリを選んでください", categories)
-            if st.button("このカテゴリで探す", key="category_button"):
-                with st.spinner(f"「{selected_category}」カテゴリの本を探しています..."):
-                    st.session_state.search_results = search_books(selected_category)
-                st.rerun()
+    with tab2:
+        categories = [
+            "夏目漱石", 
+            "芥川龍之介", 
+            "太宰治", 
+            "村上春樹", 
+            "東野圭吾",
+            "吾輩は猫である",
+            "人間失格"
+        ]
+        selected_category = st.selectbox("興味のある作家や作品を選んでください", categories)
+        if st.button("このカテゴリで探す", key="category_button"):
+            with st.spinner(f"「{selected_category}」の関連書籍を探しています..."):
+                st.session_state.search_results = search_books(selected_category)
+            st.rerun()
         
         with tab3:
             st.subheader("レビューランキング")

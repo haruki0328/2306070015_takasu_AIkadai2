@@ -1,14 +1,15 @@
 import requests
 import pandas as pd
 import os
-import hashlib
+import hashlib # パスワードのハッシュ化に使用
+import streamlit as st # キャッシュ機能のためにインポート
 
-# ファイル定義
+# --- ファイル定義 ---
 REVIEW_FILE = "reviews.csv"
 USER_FILE = "users.csv"
-WISHLIST_FILE = "wishlist.csv" # ウィッシュリスト用のファイルを追加
+WISHLIST_FILE = "wishlist.csv"
 
-# --- アカウント管理関数 (新規追加) ---
+# --- アカウント管理関数 ---
 
 def hash_password(password):
     """パスワードをハッシュ化する"""
@@ -49,7 +50,9 @@ def verify_user(username, password):
             return True
     return False
 
+# --- 書籍・レビュー関連関数 ---
 
+@st.cache_data(ttl=3600) # 1時間キャッシュ
 def search_books(query):
     """Open Library APIを使って書籍を検索する"""
     if not query:
@@ -62,7 +65,7 @@ def search_books(query):
         data = response.json()
         
         books = []
-        for doc in data.get("docs", [])[:9]: # 3列表示のため9件に調整
+        for doc in data.get("docs", [])[:9]:
             book_id = doc.get("key")
             title = doc.get("title")
             author = ", ".join(doc.get("author_name", ["N/A"]))
@@ -105,6 +108,7 @@ def save_review(book_id, book_title, username, rating, comment):
     header = not os.path.exists(REVIEW_FILE)
     df.to_csv(REVIEW_FILE, mode='a', header=header, index=False)
 
+@st.cache_data(ttl=600) # 10分キャッシュ
 def get_ranking_data():
     """レビューデータを集計してランキング情報を返す"""
     if not os.path.exists(REVIEW_FILE):
@@ -135,12 +139,13 @@ def get_user_reviews(username):
 
     return df[df["username"] == username]
 
+# --- ウィッシュリスト関数 ---
+
 def add_to_wishlist(username, book_id, book_title):
     """ウィッシュリストに本を追加する"""
     if not os.path.exists(WISHLIST_FILE):
         pd.DataFrame(columns=["username", "book_id", "book_title"]).to_csv(WISHLIST_FILE, index=False)
     
-    # 既にリストにないか確認
     if is_in_wishlist(username, book_id):
         return
 

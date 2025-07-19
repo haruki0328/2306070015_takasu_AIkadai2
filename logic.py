@@ -1,11 +1,12 @@
 import requests
 import pandas as pd
 import os
-import hashlib # パスワードのハッシュ化に使用
+import hashlib
 
 # ファイル定義
 REVIEW_FILE = "reviews.csv"
 USER_FILE = "users.csv"
+WISHLIST_FILE = "wishlist.csv" # ウィッシュリスト用のファイルを追加
 
 # --- アカウント管理関数 (新規追加) ---
 
@@ -133,3 +134,35 @@ def get_user_reviews(username):
         return pd.DataFrame()
 
     return df[df["username"] == username]
+
+def add_to_wishlist(username, book_id, book_title):
+    """ウィッシュリストに本を追加する"""
+    if not os.path.exists(WISHLIST_FILE):
+        pd.DataFrame(columns=["username", "book_id", "book_title"]).to_csv(WISHLIST_FILE, index=False)
+    
+    # 既にリストにないか確認
+    if is_in_wishlist(username, book_id):
+        return
+
+    new_entry = {
+        "username": [username],
+        "book_id": [book_id],
+        "book_title": [book_title]
+    }
+    pd.DataFrame(new_entry).to_csv(WISHLIST_FILE, mode='a', header=False, index=False)
+
+def get_wishlist(username):
+    """指定されたユーザーのウィッシュリストを取得する"""
+    if not os.path.exists(WISHLIST_FILE):
+        return pd.DataFrame()
+    
+    df = pd.read_csv(WISHLIST_FILE)
+    return df[df["username"] == username]
+
+def is_in_wishlist(username, book_id):
+    """本が既にウィッシュリストにあるか確認する"""
+    if not os.path.exists(WISHLIST_FILE):
+        return False
+        
+    df = pd.read_csv(WISHLIST_FILE)
+    return not df[(df["username"] == username) & (df["book_id"] == book_id)].empty

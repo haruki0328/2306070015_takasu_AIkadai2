@@ -1,12 +1,12 @@
-# app.py (アカウント機能追加版)
-
 import streamlit as st
 from logic import (
     search_books, load_reviews, save_review, 
     get_ranking_data, get_user_reviews,
-    register_user, verify_user
+    register_user, verify_user,
+    add_to_wishlist, get_wishlist, is_in_wishlist
 )
 
+# ページ設定はスクリプトの最初に一度だけ呼び出す
 st.set_page_config(layout="wide")
 
 # ----------------------------------------------------------------
@@ -59,28 +59,47 @@ else:
         st.title(f"📚 {st.session_state.logged_in_user}さんの本棚")
     with col2:
         if st.button("ログアウト"):
+            # ログアウト時にセッション情報をクリア
+            for key in list(st.session_state.keys()):
+                if key != 'logged_in_user':
+                    del st.session_state[key]
             st.session_state.logged_in_user = None
             st.rerun()
 
     # --- レビューページ ---
     if "selected_book_id" in st.session_state:
-        # (この部分は以前のコードとほぼ同じ。usernameの扱いだけ変更)
-        # ...
+        book_id = st.session_state.selected_book_id
+        book_title = st.session_state.selected_book_title
+
         if st.button("← メインページに戻る"):
             del st.session_state.selected_book_id
+            if "selected_book_title" in st.session_state:
+                del st.session_state.selected_book_title
             st.rerun()
 
-        st.header(f"「{st.session_state.selected_book_title}」のレビュー")
+        st.header(f"「{book_title}」のレビュー")
 
-        with st.form(f"review_form_{st.session_state.selected_book_id}", clear_on_submit=True):
+        # ▼▼▼ 抜けていたレビュー表示部分 ▼▼▼
+        st.subheader("投稿されたレビュー")
+        reviews_df = load_reviews(book_id)
+        if not reviews_df.empty:
+            for index, row in reviews_df.iterrows():
+                st.markdown(f"**{row['username']}** さん (評価: {'★' * int(row['rating'])})")
+                st.info(row['comment'])
+                st.markdown("---")
+        else:
+            st.write("まだレビューはありません。")
+        # ▲▲▲ ここまで ▲▲▲
+
+        st.subheader("レビューを投稿する")
+        with st.form(f"review_form_{book_id}", clear_on_submit=True):
             rating = st.slider("評価 (5段階)", 1, 5, 3)
             comment = st.text_area("コメント")
             submitted = st.form_submit_button("投稿")
             if submitted:
-                # ログイン中のユーザー名を自動で使用
                 save_review(
-                    st.session_state.selected_book_id, 
-                    st.session_state.selected_book_title, 
+                    book_id, 
+                    book_title, 
                     st.session_state.logged_in_user, 
                     rating, 
                     comment
@@ -94,13 +113,48 @@ else:
         
         tab1, tab2, tab3, tab4 = st.tabs(["🔍 キーワード検索", "🌟 カテゴリ検索", "🏆 ランキング", "👤 マイページ"])
         
-        # (検索タブ、カテゴリタブ、ランキングタブは以前のコードとほぼ同じ)
-        # ...
+        # ▼▼▼ 抜けていたタブの中身 ▼▼▼
+        with tab1:
+            search_query = st.text_input("書籍名や著者名を入力", key="search_input")
+            if st.button("検索", key="search_button"):
+                with st.spinner("検索中..."):
+                    st.session_state.search_results = search_books(search_query)
+                st.rerun()
+        
+    with tab2:
+        categories = [
+            "夏目漱石", 
+            "芥川龍之介", 
+            "太宰治", 
+            "村上春樹", 
+            "東野圭吾",
+            "吾輩は猫である",
+            "人間失格"
+        ]
+        selected_category = st.selectbox("興味のある作家や作品を選んでください", categories)
+        if st.button("このカテゴリで探す", key="category_button"):
+            with st.spinner(f"「{selected_category}」の関連書籍を探しています..."):
+                st.session_state.search_results = search_books(selected_category)
+            st.rerun()
+        
+        with tab3:
+            st.subheader("レビューランキング")
+            most_reviewed, top_rated = get_ranking_data()
+            
+            st.markdown("#### レビュー数 TOP5")
+            if not most_reviewed.empty:
+                st.dataframe(most_reviewed[['book_title', 'review_count']].rename(columns={'book_title': '書籍名', 'review_count': 'レビュー数'}), use_container_width=True)
+            else:
+                st.write("まだレビューがありません。")
 
-        # --- マイページタブ (修正) ---
+            st.markdown("#### 評価点 TOP5")
+            if not top_rated.empty:
+                st.dataframe(top_rated[['book_title', 'rating']].rename(columns={'book_title': '書籍名', 'rating': '平均評価'}).style.format({'平均評価': '{:.2f}'}), use_container_width=True)
+            else:
+                st.write("まだレビューがありません。")
+        
         with tab4:
             st.subheader(f"{st.session_state.logged_in_user}さんの投稿履歴")
-            # ログイン中のユーザーのレビューを自動で表示
             user_reviews = get_user_reviews(st.session_state.logged_in_user)
             if not user_reviews.empty:
                 for index, row in user_reviews.iterrows():
@@ -109,27 +163,44 @@ else:
                     st.markdown("---")
             else:
                 st.write("まだレビューを投稿していません。")
-                
-        # (検索結果表示部分は以前のコードとほぼ同じ)
-        # ...
+            
+            st.markdown("---")
+            st.subheader("読みたい本リスト")
+            wishlist_df = get_wishlist(st.session_state.logged_in_user)
+            if not wishlist_df.empty:
+                for index, row in wishlist_df.iterrows():
+                    st.markdown(f"- {row['book_title']}")
+            else:
+                st.write("読みたい本リストは空です。")
+        # ▲▲▲ ここまで ▲▲▲
+        
+        st.markdown("---")
 
-    st.markdown("---") # 区切り線
+        # ▼▼▼ 抜けていた検索結果表示部分 ▼▼▼
+        if "search_results" in st.session_state and st.session_state.search_results:
+            st.subheader("書籍一覧")
+            st.write("レビューしたい本を選んでください。")
+            cols = st.columns(3)
+            for i, book in enumerate(st.session_state.search_results):
+                with cols[i % 3]:
+                    if book["cover_url"]:
+                        st.image(book["cover_url"])
+                    else:
+                        st.markdown("*(画像なし)*")
+                    st.write(f"**{book['title']}**")
+                    st.caption(f"著者: {book['author']}")
 
-    # --- 検索結果の表示 ---
-    if "search_results" in st.session_state and st.session_state.search_results:
-        # (この部分は変更なし)
-        st.subheader("書籍一覧")
-        st.write("レビューしたい本を選んでください。")
-        cols = st.columns(3)
-        for i, book in enumerate(st.session_state.search_results):
-            with cols[i % 3]:
-                if book["cover_url"]:
-                    st.image(book["cover_url"])
-                else:
-                    st.markdown("*(画像なし)*")
-                st.write(f"**{book['title']}**")
-                st.caption(f"著者: {book['author']}")
-                if st.button("この本をレビューする", key=book["id"]):
-                    st.session_state.selected_book_id = book['id']
-                    st.session_state.selected_book_title = book['title']
-                    st.rerun()
+                    b_col1, b_col2 = st.columns(2)
+                    with b_col1:
+                        if st.button("レビューする", key=f"review_{book['id']}"):
+                            st.session_state.selected_book_id = book['id']
+                            st.session_state.selected_book_title = book['title']
+                            st.rerun()
+                    
+                    with b_col2:
+                        in_wishlist = is_in_wishlist(st.session_state.logged_in_user, book['id'])
+                        if st.button("読みたい", key=f"wish_{book['id']}", disabled=in_wishlist):
+                            add_to_wishlist(st.session_state.logged_in_user, book['id'], book['title'])
+                            st.success(f"「{book['title']}」をリストに追加しました。")
+                            st.rerun()
+        # ▲▲▲ ここまで ▲▲▲

@@ -14,13 +14,13 @@
 
 外部サービス（Open Library API）との連携や、内部で利用しているCSVファイル（ユーザー・レビュー・ウィッシュリスト管理）との関係を図示しています。
 
-![システム設計図](./system_design.png)
+![システム設計図]
 
 ## コード説明図
 
 主要なファイル（`app.py`, `logic.py` など）や、主要関数の関係性を図示しています。
 
-![コード説明図](./code_layout.png)
+![コード説明図]
 
 ## ファイル構成
 
@@ -36,6 +36,3 @@
 1. 必要なパッケージをインストール（`pip install -r requirements.txt`）
 2. Streamlitで起動（`streamlit run app.py`）
 3. Webブラウザでアクセスし、ユーザー登録・ログインして利用
-
----
-図の作成例や参考レイアウトは [yoji0806/paper_in_economics](https://github.com/yoji0806/paper_in_economics) のREADMEを参照してください。

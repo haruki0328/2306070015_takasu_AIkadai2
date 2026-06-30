@@ -1,173 +1,155 @@
-import requests
-import pandas as pd
 import os
-import hashlib # パスワードのハッシュ化に使用
-import streamlit as st # キャッシュ機能のためにインポート
+import pandas as pd
+import hashlib
+import requests
+import streamlit as st
+import uuid
 
-# --- ファイル定義 ---
 REVIEW_FILE = "reviews.csv"
 USER_FILE = "users.csv"
-WISHLIST_FILE = "wishlist.csv"
+USER_BOOKS_FILE = "user_books.csv" # wishlistから拡張
 
-# --- アカウント管理関数 ---
-
+# ==========================================
+# 認証・セキュリティロジック
+# ==========================================
 def hash_password(password):
-    """パスワードをハッシュ化する"""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def verify_password(stored_password_hash, provided_password):
-    """入力されたパスワードが保存されたハッシュと一致するか検証する"""
     return stored_password_hash == hash_password(provided_password)
 
 def register_user(username, password):
-    """ユーザーを新規登録する"""
+    username = username.strip() if username else ""
+    if not username:
+        return False, "ユーザー名を入力してください。"
+
+    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.islower() for c in password) or not any(c.isdigit() for c in password):
+        return False, "パスワードの条件を満たしていません。"
+
     if not os.path.exists(USER_FILE):
-        df = pd.DataFrame(columns=["username", "password_hash"])
-        df.to_csv(USER_FILE, index=False)
-    
-    df = pd.read_csv(USER_FILE)
-    if username in df["username"].values:
-        return False, "このユーザー名は既に使用されています。"
-    
-    new_user = {
-        "username": [username],
-        "password_hash": [hash_password(password)]
-    }
-    pd.DataFrame(new_user).to_csv(USER_FILE, mode='a', header=False, index=False)
-    return True, "登録が完了しました。"
-
-def verify_user(username, password):
-    """ユーザーのログインを認証する"""
-    if not os.path.exists(USER_FILE):
-        return False
-        
-    df = pd.read_csv(USER_FILE)
-    user_data = df[df["username"] == username]
-    
-    if not user_data.empty:
-        stored_hash = user_data.iloc[0]["password_hash"]
-        if verify_password(stored_hash, password):
-            return True
-    return False
-
-# --- 書籍・レビュー関連関数 ---
-
-@st.cache_data(ttl=3600) # 1時間キャッシュ
-def search_books(query):
-    """Open Library APIを使って書籍を検索する"""
-    if not query:
-        return []
+        pd.DataFrame(columns=["username", "password_hash"]).to_csv(USER_FILE, index=False)
     
     try:
-        url = f"https://openlibrary.org/search.json?q={query}"
-        response = requests.get(url)
+        df = pd.read_csv(USER_FILE, dtype={"username": str})
+    except Exception:
+        df = pd.DataFrame(columns=["username", "password_hash"])
+    
+    if username in df["username"].fillna("").tolist():
+        return False, f"「{username}」は既に使用されています。"
+    
+    new_user = {"username": [username], "password_hash": [hash_password(password)]}
+    pd.DataFrame(new_user).to_csv(USER_FILE, mode='a', header=False, index=False)
+    return True, "アカウントを作成しました。ログインしてください。"
+
+def verify_user(username, password):
+    if not os.path.exists(USER_FILE): return False
+    try:
+        df = pd.read_csv(USER_FILE, dtype={"username": str})
+        user_data = df[df["username"] == username]
+        if not user_data.empty and verify_password(user_data.iloc[0]["password_hash"], password):
+            return True
+    except Exception:
+        pass
+    return False
+
+# ==========================================
+# API・書籍データロジック
+# ==========================================
+@st.cache_data(ttl=3600)
+def search_books(query, limit=12):
+    if not query: return []
+    try:
+        response = requests.get(f"https://openlibrary.org/search.json?q={query}")
         response.raise_for_status()
-        data = response.json()
-        
         books = []
-        for doc in data.get("docs", [])[:9]:
+        for doc in response.json().get("docs", [])[:limit]: 
             book_id = doc.get("key")
             title = doc.get("title")
-            author = ", ".join(doc.get("author_name", ["N/A"]))
+            author = ", ".join(doc.get("author_name", ["不明な著者"]))
             cover_id = doc.get("cover_i")
             cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else None
             
             if book_id and title:
-                books.append({
-                    "id": book_id,
-                    "title": title,
-                    "author": author,
-                    "cover_url": cover_url
-                })
+                books.append({"id": book_id, "title": title, "author": author, "cover_url": cover_url})
         return books
-    except requests.exceptions.RequestException as e:
-        print(f"APIリクエストエラー: {e}")
+    except Exception:
         return []
 
+# ==========================================
+# レビュー＆いいね機能
+# ==========================================
 def load_reviews(book_id):
-    """特定の書籍IDのレビューをCSVファイルから読み込む"""
-    if not os.path.exists(REVIEW_FILE):
-        return pd.DataFrame()
-    try:
-        df = pd.read_csv(REVIEW_FILE)
-        return df[df["book_id"] == book_id]
-    except pd.errors.EmptyDataError:
-        return pd.DataFrame()
+    if not os.path.exists(REVIEW_FILE): return pd.DataFrame()
+    df = pd.read_csv(REVIEW_FILE)
+    return df[df["book_id"] == book_id].sort_values(by="likes", ascending=False) # いいね順で表示
 
-def save_review(book_id, book_title, username, rating, comment):
-    """レビューをCSVファイルに保存する"""
+def save_review(book_id, book_title, author, cover_url, username, rating, comment):
+    review_id = str(uuid.uuid4()) # レビューごとの一意なIDを生成
     new_review = {
+        "review_id": [review_id],
         "book_id": [book_id],
         "book_title": [book_title],
+        "author": [author],
+        "cover_url": [cover_url],
         "username": [username],
         "rating": [rating],
-        "comment": [comment]
+        "comment": [comment],
+        "likes": [0] # 初期いいね数は0
     }
     df = pd.DataFrame(new_review)
-    
-    header = not os.path.exists(REVIEW_FILE)
-    df.to_csv(REVIEW_FILE, mode='a', header=header, index=False)
+    df.to_csv(REVIEW_FILE, mode='a', header=not os.path.exists(REVIEW_FILE), index=False)
 
-@st.cache_data(ttl=600) # 10分キャッシュ
-def get_ranking_data():
-    """レビューデータを集計してランキング情報を返す"""
-    if not os.path.exists(REVIEW_FILE):
-        return pd.DataFrame(), pd.DataFrame()
-
+def increment_like(review_id):
+    if not os.path.exists(REVIEW_FILE): return
     df = pd.read_csv(REVIEW_FILE)
-    
-    if 'book_title' not in df.columns:
-        return pd.DataFrame(), pd.DataFrame()
+    df.loc[df["review_id"] == review_id, "likes"] += 1
+    df.to_csv(REVIEW_FILE, index=False)
 
-    most_reviewed = df.groupby(['book_id', 'book_title']).size().reset_index(name='review_count')
-    most_reviewed = most_reviewed.sort_values(by='review_count', ascending=False).head(5)
-
-    top_rated = df.groupby(['book_id', 'book_title'])['rating'].mean().reset_index()
-    top_rated = top_rated.sort_values(by='rating', ascending=False).head(5)
+@st.cache_data(ttl=10)
+def get_ranking_data():
+    if not os.path.exists(REVIEW_FILE): return pd.DataFrame(), pd.DataFrame()
+    df = pd.read_csv(REVIEW_FILE)
+    if df.empty: return pd.DataFrame(), pd.DataFrame()
     
+    most_reviewed = df.groupby('book_id').agg({'book_title':'first', 'author':'first', 'cover_url':'first', 'book_id':'size'}).rename(columns={'book_id': 'review_count'}).sort_values(by='review_count', ascending=False).head(5).reset_index()
+    top_rated = df.groupby('book_id').agg({'book_title':'first', 'author':'first', 'cover_url':'first', 'rating':'mean'}).rename(columns={'rating': 'avg_rating'}).sort_values(by='avg_rating', ascending=False).head(5).reset_index()
     return most_reviewed, top_rated
 
-def get_user_reviews(username):
-    """特定のユーザーのレビュー履歴を取得する"""
-    if not os.path.exists(REVIEW_FILE) or not username:
-        return pd.DataFrame()
+# ==========================================
+# 読書ステータス管理機能 (読みたい/読書中/読了)
+# ==========================================
+def update_book_status(username, book_id, book_title, cover_url, status):
+    if not os.path.exists(USER_BOOKS_FILE):
+        pd.DataFrame(columns=["username", "book_id", "book_title", "cover_url", "status"]).to_csv(USER_BOOKS_FILE, index=False)
+    
+    df = pd.read_csv(USER_BOOKS_FILE)
+    mask = (df["username"] == username) & (df["book_id"] == book_id)
+    
+    if not df[mask].empty:
+        df.loc[mask, "status"] = status
+    else:
+        new_row = pd.DataFrame({"username": [username], "book_id": [book_id], "book_title": [book_title], "cover_url": [cover_url], "status": [status]})
+        df = pd.concat([df, new_row], ignore_index=True)
+    
+    df.to_csv(USER_BOOKS_FILE, index=False)
+
+def get_user_books(username):
+    if not os.path.exists(USER_BOOKS_FILE): 
+        # 修正: 列名を持った空のデータフレームを返す
+        return pd.DataFrame(columns=["username", "book_id", "book_title", "cover_url", "status"])
         
-    df = pd.read_csv(REVIEW_FILE)
-
-    if 'book_title' not in df.columns:
-        return pd.DataFrame()
-
+    df = pd.read_csv(USER_BOOKS_FILE)
+    
+    # 念のためのセーフティネット
+    if "status" not in df.columns:
+        return pd.DataFrame(columns=["username", "book_id", "book_title", "cover_url", "status"])
+        
     return df[df["username"] == username]
 
-# --- ウィッシュリスト関数 ---
-
-def add_to_wishlist(username, book_id, book_title):
-    """ウィッシュリストに本を追加する"""
-    if not os.path.exists(WISHLIST_FILE):
-        pd.DataFrame(columns=["username", "book_id", "book_title"]).to_csv(WISHLIST_FILE, index=False)
-    
-    if is_in_wishlist(username, book_id):
-        return
-
-    new_entry = {
-        "username": [username],
-        "book_id": [book_id],
-        "book_title": [book_title]
-    }
-    pd.DataFrame(new_entry).to_csv(WISHLIST_FILE, mode='a', header=False, index=False)
-
-def get_wishlist(username):
-    """指定されたユーザーのウィッシュリストを取得する"""
-    if not os.path.exists(WISHLIST_FILE):
-        return pd.DataFrame()
-    
-    df = pd.read_csv(WISHLIST_FILE)
-    return df[df["username"] == username]
-
-def is_in_wishlist(username, book_id):
-    """本が既にウィッシュリストにあるか確認する"""
-    if not os.path.exists(WISHLIST_FILE):
-        return False
-        
-    df = pd.read_csv(WISHLIST_FILE)
-    return not df[(df["username"] == username) & (df["book_id"] == book_id)].empty
+def get_book_status(username, book_id):
+    if not os.path.exists(USER_BOOKS_FILE): return "未登録"
+    df = pd.read_csv(USER_BOOKS_FILE)
+    user_book = df[(df["username"] == username) & (df["book_id"] == book_id)]
+    if not user_book.empty:
+        return user_book.iloc[0]["status"]
+    return "未登録"

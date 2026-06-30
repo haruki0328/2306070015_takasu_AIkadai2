@@ -3,7 +3,8 @@ import pandas as pd
 from logic import (
     search_books, load_reviews, save_review, increment_like,
     get_ranking_data, register_user, verify_user,
-    update_book_status, get_user_books, get_book_status
+    update_book_status, get_user_books, get_book_status,
+    get_random_books
 )
 
 st.set_page_config(page_title="BookShelf Pro", page_icon="📖", layout="wide", initial_sidebar_state="expanded")
@@ -84,9 +85,9 @@ if not st.session_state.logged_in_user:
 else:
     # --- サイドバー・ナビゲーション ---
     with st.sidebar:
-        st.markdown(f"### 🛡️ {st.session_state.logged_in_user}")
+        st.markdown(f"###  {st.session_state.logged_in_user}")
         st.write("---")
-        if st.button("🔍 探索する", use_container_width=True, type="primary" if st.session_state.app_page == "検索" else "secondary"):
+        if st.button("🔍 検索する", use_container_width=True, type="primary" if st.session_state.app_page == "検索" else "secondary"):
             st.session_state.app_page = "検索"; st.session_state.selected_book = None; st.rerun()
         if st.button("📈 トレンド", use_container_width=True, type="primary" if st.session_state.app_page == "ランキング" else "secondary"):
             st.session_state.app_page = "ランキング"; st.session_state.selected_book = None; st.rerun()
@@ -174,8 +175,13 @@ else:
     # ページ1: 検索
     # ==========================================
     elif st.session_state.app_page == "検索":
-        st.title("🔍 探索エンジン")
-        query = st.text_input("キーワードを入力", placeholder="技術書、小説、著者名...", label_visibility="collapsed")
+        st.title("🔍 探索")
+        col_q, col_btn = st.columns([5, 1])
+        with col_q:
+            query = st.text_input("キーワードを入力", placeholder="技術書、小説、著者名...", label_visibility="collapsed")
+        with col_btn:
+            shuffle_clicked = st.button("🎲 シャッフル", use_container_width=True)
+
         if query:
             with st.spinner("データベースにクエリを送信中..."):
                 results = search_books(query)
@@ -185,7 +191,25 @@ else:
                 for i, book in enumerate(results):
                     with cols[i % 4]: render_book_card(book)
             else:
-                st.warning("条件に一致するレコードがありません。")
+                st.warning("そのキーワードでは見つかりませんでした。表記やスペースを変えて試してみてください（例: スペースを削る／著者名のみで検索）。")
+                st.markdown("##### 💡 こんな本はいかがですか？")
+                random_books = get_random_books()
+                if random_books:
+                    cols = st.columns(4)
+                    for i, book in enumerate(random_books):
+                        with cols[i % 4]: render_book_card(book)
+        else:
+            # キーワード未入力時は、ランダムなおすすめ本を表示して画面を賑やかにする
+            if shuffle_clicked:
+                get_random_books.clear()
+            st.markdown("##### ✨ 今日のおすすめ")
+            random_books = get_random_books()
+            if random_books:
+                cols = st.columns(4)
+                for i, book in enumerate(random_books):
+                    with cols[i % 4]: render_book_card(book)
+            else:
+                st.info("おすすめ本を取得できませんでした。キーワードを入力して検索してください。")
 
     # ==========================================
     # ページ2: ランキング

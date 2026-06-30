@@ -1,2 +1,7 @@
 review_id,book_id,book_title,author,cover_url,username,rating,comment,likes
 2d96a439-0d72-4ab5-b3e1-eb38da809093,/works/OL2784125W,Learning Python,"Mark Lutz, David Ascher",https://covers.openlibrary.org/b/id/1312568-M.jpg,あ,3,,0
+f0abd0f9-a957-4d8f-a641-fdcf1aa56272,/works/OL82563W,Harry Potter and the Philosopher's Stone,J. K. Rowling,https://covers.openlibrary.org/b/id/15155833-M.jpg,H,5,,4
+819f4026-86cc-490f-aaf3-991a6f6e8ddc,/works/OL1980606W,Tax Planning and Compliance for Tax-Exempt Organizations,Jody Blazek,https://covers.openlibrary.org/b/id/1244459-M.jpg,H,1,,0
+f4e98cec-18f4-42b8-828a-cbd59dac6f7c,/works/OL2693772W,Confessions of an economic hit man,"Perkins, John, John Perkins, John Perkins, Perkins, John",https://covers.openlibrary.org/b/id/13977093-M.jpg,H,4,,0
+c8124ee0-bf09-4c6c-9ffd-cc655ba4aa7a,/works/OL2693772W,Confessions of an economic hit man,"Perkins, John, John Perkins, John Perkins, Perkins, John",https://covers.openlibrary.org/b/id/13977093-M.jpg,H,2,,0
+ae6c7a30-eec7-4c49-ae52-21b5c01dc931,/works/OL8921343W,Leadership and Self Deception,"The Arbinger Institute, Dick Ruhe",https://covers.openlibrary.org/b/id/831276-M.jpg,user,5,Haru,0

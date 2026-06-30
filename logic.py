@@ -4,6 +4,7 @@ import hashlib
 import requests
 import streamlit as st
 import uuid
+import random
 
 REVIEW_FILE = "reviews.csv"
 USER_FILE = "users.csv"
@@ -55,22 +56,82 @@ def verify_user(username, password):
 # ==========================================
 # API・書籍データロジック
 # ==========================================
+def _fetch_search(query, limit):
+    response = requests.get(
+        "https://openlibrary.org/search.json",
+        params={"q": query, "limit": limit}
+    )
+    response.raise_for_status()
+    books = []
+    for doc in response.json().get("docs", [])[:limit]:
+        book_id = doc.get("key")
+        title = doc.get("title")
+        author = ", ".join(doc.get("author_name", ["不明な著者"]))
+        cover_id = doc.get("cover_i")
+        cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else None
+
+        if book_id and title:
+            books.append({"id": book_id, "title": title, "author": author, "cover_url": cover_url})
+    return books
+
 @st.cache_data(ttl=3600)
 def search_books(query, limit=12):
     if not query: return []
+    query = query.strip()
+    if not query: return []
+
     try:
-        response = requests.get(f"https://openlibrary.org/search.json?q={query}")
+        books = _fetch_search(query, limit)
+
+        # 完全一致で0件だった場合、キーワードを少し緩めて再検索する
+        # （例: 「ハリーポッター 1」のようにスペース混じりで打ってしまった場合の救済）
+        if not books and " " in query:
+            for word in query.split():
+                if len(word) < 2:
+                    continue
+                books = _fetch_search(word, limit)
+                if books:
+                    break
+
+        return books
+    except Exception:
+        return []
+
+# ==========================================
+# トップページ用：ランダムおすすめ本
+# ==========================================
+RANDOM_SUBJECTS = [
+    "fiction", "fantasy", "mystery", "science_fiction", "romance",
+    "history", "biography", "business", "self_help", "poetry",
+    "cooking", "art", "philosophy", "programming", "psychology",
+]
+
+@st.cache_data(ttl=600)
+def get_random_books(limit=12):
+    """検索ワード未入力時に表示する、ランダムなおすすめ本を取得する"""
+    try:
+        subject = random.choice(RANDOM_SUBJECTS)
+        offset = random.randint(0, 80)
+        response = requests.get(
+            f"https://openlibrary.org/subjects/{subject}.json",
+            params={"limit": limit, "offset": offset}
+        )
         response.raise_for_status()
+        works = response.json().get("works", [])
+
         books = []
-        for doc in response.json().get("docs", [])[:limit]: 
-            book_id = doc.get("key")
-            title = doc.get("title")
-            author = ", ".join(doc.get("author_name", ["不明な著者"]))
-            cover_id = doc.get("cover_i")
+        for w in works:
+            book_id = w.get("key")
+            title = w.get("title")
+            authors = w.get("authors", [])
+            author = ", ".join(a.get("name", "") for a in authors) if authors else "不明な著者"
+            cover_id = w.get("cover_id")
             cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else None
-            
+
             if book_id and title:
                 books.append({"id": book_id, "title": title, "author": author, "cover_url": cover_url})
+
+        random.shuffle(books)
         return books
     except Exception:
         return []

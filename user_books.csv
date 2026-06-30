@@ -1,2 +1,9 @@
 username,book_id,book_title,cover_url,status
 あ,/works/OL2784125W,Learning Python,https://covers.openlibrary.org/b/id/1312568-M.jpg,未登録
+H,/works/OL82563W,Harry Potter and the Philosopher's Stone,https://covers.openlibrary.org/b/id/15155833-M.jpg,読書中
+H,/works/OL1980606W,Tax Planning and Compliance for Tax-Exempt Organizations,https://covers.openlibrary.org/b/id/1244459-M.jpg,読了
+H,/works/OL2693772W,Confessions of an economic hit man,https://covers.openlibrary.org/b/id/13977093-M.jpg,読みたい
+user,/works/OL1980606W,Tax Planning and Compliance for Tax-Exempt Organizations,https://covers.openlibrary.org/b/id/1244459-M.jpg,読みたい
+user,/works/OL274336W,Managing for Results,https://covers.openlibrary.org/b/id/38818-M.jpg,読書中
+user,/works/OL273188W,Security Analysis,https://covers.openlibrary.org/b/id/60206-M.jpg,読了
+user,/works/OL274337W,The Practice of Management,https://covers.openlibrary.org/b/id/6418448-M.jpg,読了

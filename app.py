@@ -21,6 +21,8 @@ if 'app_page' not in st.session_state:
     st.session_state.app_page = "検索"
 if 'selected_book' not in st.session_state:
     st.session_state.selected_book = None
+if 'liked_reviews' not in st.session_state:
+    st.session_state.liked_reviews = set()
 
 
 def render_book_card(book):
@@ -89,8 +91,20 @@ if not st.session_state.logged_in_user:
             low_ok = any(c.islower() for c in new_password)
             num_ok = any(c.isdigit() for c in new_password)
             
-            st.markdown("<style>.req-box { font-size: 0.85em; color: #555; padding: 10px; background: #f0f2f6; border-radius: 8px; margin-bottom: 15px; }</style>", unsafe_allow_html=True)
-            st.markdown(f"<div class='req-box'><b>要件:</b><br>{'OK' if len_ok else 'NG'} 8文字以上<br>{'OK' if up_ok else 'NG'} 大文字<br>{'OK' if low_ok else 'NG'} 小文字<br>{'OK' if num_ok else 'NG'} 数字</div>", unsafe_allow_html=True)
+            st.markdown("""
+                <style>
+                .req-box { padding: 10px 10px 4px; background: #f0f2f6; border-radius: 8px; margin-bottom: 15px; }
+                .req-item { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 600; margin: 0 6px 6px 0; }
+                .req-ok { background: #e6f4ea; color: #1e7e34; }
+                .req-ng { background: #f0f0f0; color: #888; }
+                </style>
+            """, unsafe_allow_html=True)
+            requirements = [(len_ok, "8文字以上"), (up_ok, "大文字"), (low_ok, "小文字"), (num_ok, "数字")]
+            items_html = "".join(
+                f"<span class='req-item {'req-ok' if ok else 'req-ng'}'>{'✓' if ok else '○'} {label}</span>"
+                for ok, label in requirements
+            )
+            st.markdown(f"<div class='req-box'>{items_html}</div>", unsafe_allow_html=True)
             
             if st.button("アカウントを作成", use_container_width=True, type="primary"):
                 if not (len_ok and up_ok and low_ok and num_ok):
@@ -183,10 +197,18 @@ else:
                     st.markdown(f"**{row['username']}** &nbsp; <span style='color:orange;'>{'★' * int(row['rating'])}</span>", unsafe_allow_html=True)
                     st.write(row['comment'])
                     
+                    # SNSライクないいねボタン（1ユーザー1レビューにつき1回まで）
+                    already_liked = row['review_id'] in st.session_state.liked_reviews
                     c1, c2 = st.columns([0.15, 0.85])
                     with c1:
-                        if st.button(f"いいね ({row['likes']})", key=f"like_{row['review_id']}"):
+                        if st.button(
+                            f"{'❤️' if already_liked else '🤍'} {row['likes']}",
+                            key=f"like_{row['review_id']}",
+                            help="いいね済みです" if already_liked else "このレビューにいいねする",
+                            disabled=already_liked,
+                        ):
                             increment_like(row['review_id'])
+                            st.session_state.liked_reviews.add(row['review_id'])
                             st.rerun()
         else:
             st.info("この本へのレビューはまだありません。")

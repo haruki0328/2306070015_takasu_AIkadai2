@@ -195,7 +195,10 @@ else:
             for _, row in reviews_df.iterrows():
                 with st.container(border=True):
                     st.markdown(f"**{row['username']}** &nbsp; <span style='color:orange;'>{'★' * int(row['rating'])}</span>", unsafe_allow_html=True)
-                    st.write(row['comment'])
+                    if row['comment']:
+                        st.write(row['comment'])
+                    else:
+                        st.caption("（コメントなし）")
                     
                     # SNSライクないいねボタン（1ユーザー1レビューにつき1回まで）
                     already_liked = row['review_id'] in st.session_state.liked_reviews

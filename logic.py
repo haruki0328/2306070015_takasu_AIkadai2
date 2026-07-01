@@ -173,6 +173,7 @@ def load_reviews(book_id):
     """指定された書籍のレビューを「いいね」が多い順に取得し、有用な評価を上位に表示する"""
     if not os.path.exists(REVIEW_FILE): return pd.DataFrame()
     df = pd.read_csv(REVIEW_FILE)
+    df["comment"] = df["comment"].fillna("") # 未入力コメントがNaN("nan"表示)になるのを防ぐ
     return df[df["book_id"] == book_id].sort_values(by="likes", ascending=False)
 
 def save_review(book_id, book_title, author, cover_url, username, rating, comment):

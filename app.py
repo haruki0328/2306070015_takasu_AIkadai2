@@ -7,9 +7,14 @@ from logic import (
     get_random_books
 )
 
-# page_iconの絵文字設定を削除
+# UIレイアウトの初期設定（画面幅を広く使い、多くの書籍情報を表示可能にする）
 st.set_page_config(page_title="BookShelf Pro", layout="wide", initial_sidebar_state="expanded")
 
+# ==========================================
+# セッション状態（State）の初期化
+# Streamlitは画面操作（ボタン押下など）のたびにスクリプト全体を再実行する仕様のため、
+# ログイン情報や現在の表示画面などを跨いで保持するために session_state を利用する。
+# ==========================================
 if 'logged_in_user' not in st.session_state:
     st.session_state.logged_in_user = None
 if 'app_page' not in st.session_state:
@@ -17,18 +22,30 @@ if 'app_page' not in st.session_state:
 if 'selected_book' not in st.session_state:
     st.session_state.selected_book = None
 
+
 def render_book_card(book):
+    """
+    書籍を表示するカード型のUIコンポーネント。
+    複数の画面（検索結果、ランキング、本棚）で共通して使われるため、関数化してコードの重複を防ぐ。
+    """
     with st.container(border=True):
         if book.get("cover_url"):
             st.image(book["cover_url"], use_container_width=True)
         else:
+            # 画像がない場合のレイアウト崩れを防ぐプレースホルダー
             st.markdown("<div style='height:200px; display:flex; align-items:center; justify-content:center; background:#f0f2f6; border-radius:5px; margin-bottom:10px; color:#888;'>画像なし</div>", unsafe_allow_html=True)
         
+        # タイトルが長すぎて改行によるレイアウト崩れが起きないよう、25文字でトリミング
         st.markdown(f"**{book['title'][:25]}**")
+        
         if st.button("詳細・レビュー", key=f"btn_{book['id']}", use_container_width=True):
+            # 選択された書籍データをセッションに保存し、詳細画面へ遷移させる
             st.session_state.selected_book = book
             st.rerun()
 
+# ==========================================
+# ルーティング制御：未ログイン時は認証画面のみを表示
+# ==========================================
 if not st.session_state.logged_in_user:
     _, col2, _ = st.columns([1, 2, 1])
     with col2:
@@ -40,12 +57,14 @@ if not st.session_state.logged_in_user:
         if 'preset_username' not in st.session_state: 
             st.session_state.preset_username = ""
 
+        # ログインと新規登録のUIを切り替えるタブ
         selected_mode = st.radio(" ", ["ログイン", "新規登録"], index=0 if st.session_state.auth_mode == "ログイン" else 1, horizontal=True, label_visibility="collapsed")
         st.session_state.auth_mode = selected_mode
         
+        # --- ログイン画面 ---
         if st.session_state.auth_mode == "ログイン":
             if 'success_message' in st.session_state:
-                st.success(st.session_state.success_message) # icon引数を削除
+                st.success(st.session_state.success_message)
                 del st.session_state.success_message
                 
             with st.form("login_form"):
@@ -59,16 +78,17 @@ if not st.session_state.logged_in_user:
                     else:
                         st.error("認証失敗: ユーザー名またはパスワードが間違っています。")
                         
+        # --- 新規登録画面 ---
         elif st.session_state.auth_mode == "新規登録":
             new_username = st.text_input("ユーザー名", key="reg_user")
             new_password = st.text_input("パスワード", type="password", key="reg_pass")
             
+            # リアルタイムでパスワードの強度条件をユーザーに視覚的にフィードバックする
             len_ok = len(new_password) >= 8
             up_ok = any(c.isupper() for c in new_password)
             low_ok = any(c.islower() for c in new_password)
             num_ok = any(c.isdigit() for c in new_password)
             
-            # 絵文字をテキストのOK/NGに変更
             st.markdown("<style>.req-box { font-size: 0.85em; color: #555; padding: 10px; background: #f0f2f6; border-radius: 8px; margin-bottom: 15px; }</style>", unsafe_allow_html=True)
             st.markdown(f"<div class='req-box'><b>要件:</b><br>{'OK' if len_ok else 'NG'} 8文字以上<br>{'OK' if up_ok else 'NG'} 大文字<br>{'OK' if low_ok else 'NG'} 小文字<br>{'OK' if num_ok else 'NG'} 数字</div>", unsafe_allow_html=True)
             
@@ -85,7 +105,11 @@ if not st.session_state.logged_in_user:
                     else:
                         st.error(msg)
 
+# ==========================================
+# ルーティング制御：ログイン後のメインアプリケーション
+# ==========================================
 else:
+    # --- 共通サイドバー（ナビゲーション） ---
     with st.sidebar:
         st.markdown(f"### {st.session_state.logged_in_user}")
         st.write("---")
@@ -106,6 +130,7 @@ else:
             st.session_state.clear()
             st.rerun()
 
+    # --- 画面A：書籍詳細 ＆ レビュー画面（他画面よりも優先して表示） ---
     if st.session_state.selected_book:
         book = st.session_state.selected_book
         if st.button("← 戻る"):
@@ -122,6 +147,8 @@ else:
             
             st.write("---")
             st.markdown("**読書ステータス**")
+            
+            # 個人の本棚への登録・ステータス変更用UI
             current_status = get_book_status(st.session_state.logged_in_user, book['id'])
             status_options = ["未登録", "読みたい", "読書中", "読了"]
             new_status = st.selectbox("状態を選択", status_options, index=status_options.index(current_status), label_visibility="collapsed")
@@ -136,9 +163,9 @@ else:
             st.caption(f"著者: {book.get('author', '不明な著者')}")
             st.write("---")
             
+            # レビュー投稿フォーム（送信後に自動クリアされる設計）
             st.subheader("レビュー投稿")
             with st.form("review_form", clear_on_submit=True):
-                # sliderのフォーマットから絵文字を削除
                 rating = st.slider("評価スコア", 1, 5, 3)
                 comment = st.text_area("感想を共有")
                 if st.form_submit_button("投稿する"):
@@ -146,13 +173,13 @@ else:
                     st.toast("レビューを投稿しました")
                     st.rerun()
 
+        # コミュニティレビュー一覧表示
         st.write("---")
         st.subheader("コミュニティのレビュー")
         reviews_df = load_reviews(book['id'])
         if not reviews_df.empty:
             for _, row in reviews_df.iterrows():
                 with st.container(border=True):
-                    # 記号の★は一般的なUI表記として残しています
                     st.markdown(f"**{row['username']}** &nbsp; <span style='color:orange;'>{'★' * int(row['rating'])}</span>", unsafe_allow_html=True)
                     st.write(row['comment'])
                     
@@ -164,12 +191,14 @@ else:
         else:
             st.info("この本へのレビューはまだありません。")
 
+        # 関連書籍（同著者の別の本）をレコメンドする機能
         st.write("---")
         st.subheader("関連する書籍")
         with st.spinner("関連書籍を検索中..."):
             author_query = book.get('author', '').split(',')[0]
             if author_query and author_query != '不明な著者':
                 recommended = search_books(author_query, limit=4)
+                # 自身を除外して最大4件表示
                 recommended = [b for b in recommended if b['id'] != book['id']][:4]
                 
                 if recommended:
@@ -180,6 +209,7 @@ else:
                 else:
                     st.write("関連データが見つかりませんでした。")
 
+    # --- 画面B：検索画面（デフォルト） ---
     elif st.session_state.app_page == "検索":
         st.title("検索")
         col_q, col_btn = st.columns([5, 1])
@@ -188,6 +218,7 @@ else:
         with col_btn:
             shuffle_clicked = st.button("シャッフル", use_container_width=True)
 
+        # 検索キーワードがある場合は検索結果を表示
         if query:
             with st.spinner("検索中..."):
                 results = search_books(query)
@@ -200,6 +231,7 @@ else:
                         render_book_card(book)
             else:
                 st.warning("指定されたキーワードでは見つかりませんでした。")
+                # 検索結果が空の場合、離脱を防ぐためにサジェストを表示する
                 st.markdown("##### こちらはいかがですか？")
                 random_books = get_random_books()
                 if random_books:
@@ -207,9 +239,10 @@ else:
                     for i, book in enumerate(random_books):
                         with cols[i % 4]: 
                             render_book_card(book)
+        # キーワード未入力時はランダムな書籍を表示し、回遊を促す
         else:
             if shuffle_clicked:
-                get_random_books.clear()
+                get_random_books.clear() # キャッシュを破棄して新しいランダム結果を取得
             st.markdown("##### 今日のおすすめ")
             random_books = get_random_books()
             if random_books:
@@ -220,13 +253,14 @@ else:
             else:
                 st.info("データが取得できませんでした。")
 
+    # --- 画面C：トレンド＆ランキング ---
     elif st.session_state.app_page == "ランキング":
         st.title("トレンド＆高評価")
         most_reviewed, top_rated = get_ranking_data()
         col_left, col_right = st.columns(2)
-        # 順位をテキストに変更
         medals = {1: "1位", 2: "2位", 3: "3位", 4: "4位", 5: "5位"}
         
+        # 話題性（レビュー数）ベースのランキング
         with col_left:
             st.subheader("トレンド (レビュー数)")
             if not most_reviewed.empty:
@@ -244,6 +278,7 @@ else:
             else: 
                 st.info("データがありません。")
 
+        # 品質（平均スコア）ベースのランキング
         with col_right:
             st.subheader("トップレーティング")
             if not top_rated.empty:
@@ -261,10 +296,12 @@ else:
             else: 
                 st.info("データがありません。")
 
+    # --- 画面D：ユーザーのパーソナル本棚 ---
     elif st.session_state.app_page == "マイページ":
         st.title("本棚ダッシュボード")
         user_books_df = get_user_books(st.session_state.logged_in_user)
         
+        # KPI表示：ユーザーの読書活動のサマリーを表示
         has_status_col = not user_books_df.empty and "status" in user_books_df.columns
         count_read = len(user_books_df[user_books_df["status"] == "読了"]) if has_status_col else 0
         count_reading = len(user_books_df[user_books_df["status"] == "読書中"]) if has_status_col else 0
@@ -276,6 +313,7 @@ else:
         c3.metric("読みたい", f"{count_wish} 冊")
         st.write("---")
 
+        # 状態別にタブで絞り込んで表示する機能
         tab1, tab2, tab3 = st.tabs(["読了", "読書中", "読みたい"])
         
         def render_bookshelf_grid(df, target_status):
@@ -292,4 +330,14 @@ else:
                             st.image(row['cover_url'], use_container_width=True)
                         else:
                             st.markdown("<div style='height:150px; background:#333; color:white; display:flex; align-items:center; justify-content:center; font-size:12px; text-align:center;'>画像なし</div>", unsafe_allow_html=True)
-                        st
+                        # 長いタイトルを丸めて表示
+                        st.caption(row['book_title'][:15] + "..." if len(row['book_title']) > 15 else row['book_title'])
+            else:
+                st.info(f"「{target_status}」に登録されている本はありません。")
+
+        with tab1:
+            render_bookshelf_grid(user_books_df, "読了")
+        with tab2:
+            render_bookshelf_grid(user_books_df, "読書中")
+        with tab3:
+            render_bookshelf_grid(user_books_df, "読みたい")
